@@ -6,6 +6,8 @@ import ProfileSetup from "@/pages/ProfileSetup";
 import Dashboard from "@/pages/Dashboard";
 import Marketplace from "@/pages/Marketplace";
 import Admin from "@/pages/Admin";
+import UserProfile from "@/pages/UserProfile";
+import ReviewSession from "@/pages/ReviewSession";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -30,6 +32,8 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/admin" component={Admin} />
+      <Route path="/profile/:userId" component={UserProfile} />
+      <Route path="/review/:sessionId" component={ReviewSession} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

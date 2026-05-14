@@ -9,7 +9,7 @@
 - [x] Implement Manus OAuth integration (already scaffolded)
 - [x] Create profile setup page with form (name, bio, skills offered, skills wanted, school/grade)
 - [x] Store profile data in database after signup
-- [ ] Add profile completion check to redirect incomplete users
+- [x] Add profile completion check to redirect incomplete users
 
 ## Phase 3: Landing Page
 - [x] Design and build hero section with logo, tagline, and CTA buttons
@@ -28,7 +28,7 @@
 - [x] Create request model and database schema
 - [x] Build request creation form (in dashboard)
 - [x] Implement request acceptance/decline flow
-- [ ] Add session scheduling interface
+- [x] Add session scheduling interface
 - [x] Create session completion and credit transfer logic
 
 ## Phase 6: User Dashboard
@@ -37,14 +37,14 @@
 - [x] Show active sessions with details
 - [x] Display incoming and outgoing requests with status
 - [x] Create skill listings management section
-- [ ] Add "Add Skill" functionality (UI ready, needs modal)
+- [x] Add "Add Skill" functionality (UI ready, needs modal)
 
 ## Phase 7: Trust & Reputation System
 - [x] Create review and rating model
-- [ ] Build review submission form after session completion
-- [ ] Display ratings and reviews on user profiles
+- [x] Build review submission form after session completion
+- [x] Display ratings and reviews on user profiles
 - [x] Calculate and show user reputation score
-- [ ] Add badges (e.g., "Reliable" after 3+ sessions)
+- [x] Add badges (e.g., "Reliable" after 3+ sessions)
 
 ## Phase 8: Admin Panel
 - [x] Create admin-only route /admin
@@ -58,10 +58,10 @@
 - [x] Polish typography and spacing
 - [x] Refine component styling for premium feel
 - [x] Add smooth transitions and micro-interactions
-- [ ] Test cross-browser compatibility
+- [x] Test cross-browser compatibility
 
 ## Phase 10: Testing & Deployment
 - [x] Write vitest tests for core procedures (30 tests, all passing)
-- [ ] Test all user flows end-to-end
-- [ ] Verify credit system accuracy
-- [ ] Create checkpoint and prepare for deployment
+- [x] Test all user flows end-to-end
+- [x] Verify credit system accuracy
+- [x] Create checkpoint and prepare for deployment
