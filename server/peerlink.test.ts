@@ -325,4 +325,139 @@ describe("PeerLink tRPC Procedures", () => {
       });
     });
   });
+
+  describe("Messaging", () => {
+    it("should create a conversation between two users", async () => {
+      const { ctx: ctx1 } = createAuthContext(1);
+      const caller = appRouter.createCaller(ctx1);
+
+      const conversation = await caller.messages.startConversation({
+        otherUserId: 2,
+      });
+
+      expect(conversation).toBeDefined();
+      expect(conversation.user1Id).toBe(1);
+      expect(conversation.user2Id).toBe(2);
+    });
+
+    it("should prevent self-messaging", async () => {
+      const { ctx } = createAuthContext(1);
+      const caller = appRouter.createCaller(ctx);
+
+      await expect(
+        caller.messages.startConversation({
+          otherUserId: ctx.user.id,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("should send a message in a conversation", async () => {
+      const { ctx } = createAuthContext(1);
+      const caller = appRouter.createCaller(ctx);
+
+      // Create conversation first
+      const conversation = await caller.messages.startConversation({
+        otherUserId: 2,
+      });
+
+      // Send message
+      const message = await caller.messages.send({
+        conversationId: conversation.id,
+        content: "Hello, this is a test message!",
+      });
+
+      expect(message).toBeDefined();
+      expect(message.content).toBe("Hello, this is a test message!");
+      expect(message.senderId).toBe(ctx.user.id);
+      expect(message.isRead).toBe(false);
+    });
+
+    it("should retrieve messages from a conversation", async () => {
+      const { ctx } = createAuthContext(1);
+      const caller = appRouter.createCaller(ctx);
+
+      // Create conversation
+      const conversation = await caller.messages.startConversation({
+        otherUserId: 2,
+      });
+
+      // Send a message
+      await caller.messages.send({
+        conversationId: conversation.id,
+        content: "Test message",
+      });
+
+      // Get messages
+      const messages = await caller.messages.getMessages({
+        conversationId: conversation.id,
+      });
+
+      expect(Array.isArray(messages)).toBe(true);
+      expect(messages.length).toBeGreaterThan(0);
+    });
+
+    it("should get user conversations", async () => {
+      const { ctx } = createAuthContext(1);
+      const caller = appRouter.createCaller(ctx);
+
+      // Create a conversation
+      await caller.messages.startConversation({
+        otherUserId: 2,
+      });
+
+      // Get conversations
+      const conversations = await caller.messages.getConversations();
+
+      expect(Array.isArray(conversations)).toBe(true);
+      expect(conversations.length).toBeGreaterThan(0);
+    });
+
+    it("should get unread message count", async () => {
+      const { ctx } = createAuthContext(1);
+      const caller = appRouter.createCaller(ctx);
+
+      const count = await caller.messages.getUnreadCount();
+
+      expect(typeof count).toBe("number");
+      expect(count).toBeGreaterThanOrEqual(0);
+    });
+
+    it("should prevent unauthorized access to conversations", async () => {
+      const { ctx: ctx1 } = createAuthContext(1);
+      const { ctx: ctx2 } = createAuthContext(2);
+      const caller1 = appRouter.createCaller(ctx1);
+      const caller2 = appRouter.createCaller(ctx2);
+
+      // User 1 creates a conversation with user 3
+      const conversation = await caller1.messages.startConversation({
+        otherUserId: 3,
+      });
+
+      // User 2 tries to access it (should fail)
+      await expect(
+        caller2.messages.getMessages({
+          conversationId: conversation.id,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("should validate message content length", async () => {
+      const { ctx } = createAuthContext(1);
+      const caller = appRouter.createCaller(ctx);
+
+      const conversation = await caller.messages.startConversation({
+        otherUserId: 2,
+      });
+
+      // Try to send message that's too long
+      const longMessage = "a".repeat(1001);
+
+      await expect(
+        caller.messages.send({
+          conversationId: conversation.id,
+          content: longMessage,
+        })
+      ).rejects.toThrow();
+    });
+  });
 });

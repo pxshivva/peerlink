@@ -15,6 +15,13 @@
       "when": 1778739010671,
       "tag": "0001_messy_tyrannus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1779003054741,
+      "tag": "0002_tiresome_vision",
+      "breakpoints": true
     }
   ]
 }

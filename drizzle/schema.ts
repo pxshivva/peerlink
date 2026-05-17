@@ -175,3 +175,43 @@ export const creditTransactions = mysqlTable("credit_transactions", {
 
 export type CreditTransaction = typeof creditTransactions.$inferSelect;
 export type InsertCreditTransaction = typeof creditTransactions.$inferInsert;
+
+/**
+ * Conversations between two users (linked to sessions)
+ */
+export const conversations = mysqlTable("conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId"),
+  user1Id: int("user1Id").notNull(),
+  user2Id: int("user2Id").notNull(),
+  lastMessageAt: timestamp("lastMessageAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  sessionIdIdx: index("conv_session_id_idx").on(table.sessionId),
+  user1IdIdx: index("conv_user1_id_idx").on(table.user1Id),
+  user2IdIdx: index("conv_user2_id_idx").on(table.user2Id),
+}));
+
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = typeof conversations.$inferInsert;
+
+/**
+ * Messages within conversations
+ */
+export const messages = mysqlTable("messages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull(),
+  senderId: int("senderId").notNull(),
+  content: text("content").notNull(),
+  isRead: boolean("isRead").default(false).notNull(),
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  conversationIdIdx: index("msg_conversation_id_idx").on(table.conversationId),
+  senderIdIdx: index("msg_sender_id_idx").on(table.senderId),
+  isReadIdx: index("msg_is_read_idx").on(table.isRead),
+}));
+
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = typeof messages.$inferInsert;

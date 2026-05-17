@@ -275,6 +275,62 @@ export const appRouter = router({
       }),
   }),
 
+  // Messaging procedures
+  messages: router({
+    getConversations: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserConversations(ctx.user.id);
+    }),
+
+    getMessages: protectedProcedure
+      .input(z.object({ conversationId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        // Verify user is part of this conversation
+        const convs = await db.getUserConversations(ctx.user.id);
+        const conv = convs.find(c => c.id === input.conversationId);
+        if (!conv) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        // Mark messages as read
+        await db.markMessagesAsRead(input.conversationId);
+
+        return db.getConversationMessages(input.conversationId);
+      }),
+
+    send: protectedProcedure
+      .input(z.object({
+        conversationId: z.number(),
+        content: z.string().min(1).max(1000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Verify user is part of this conversation
+        const convs = await db.getUserConversations(ctx.user.id);
+        const conv = convs.find(c => c.id === input.conversationId);
+        if (!conv) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        return db.createMessage(input.conversationId, ctx.user.id, input.content);
+      }),
+
+    startConversation: protectedProcedure
+      .input(z.object({
+        otherUserId: z.number(),
+        sessionId: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.id === input.otherUserId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot message yourself" });
+        }
+
+        return db.getOrCreateConversation(ctx.user.id, input.otherUserId, input.sessionId);
+      }),
+
+    getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUnreadMessageCount(ctx.user.id);
+    }),
+  }),
+
   // Admin procedures
   admin: router({
     getAllUsers: protectedProcedure.query(async ({ ctx }) => {

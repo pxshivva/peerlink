@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, inArray, gte, lte } from "drizzle-orm";
+import { eq, and, or, desc, asc, inArray, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, 
@@ -10,6 +10,8 @@ import {
   sessions,
   reviews,
   creditTransactions,
+  conversations,
+  messages,
   type UserProfile,
   type Skill,
   type SkillWanted,
@@ -17,6 +19,8 @@ import {
   type Session,
   type Review,
   type CreditTransaction,
+  type Conversation,
+  type Message,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -442,4 +446,193 @@ export async function getUserTransactions(userId: number) {
   return db.select().from(creditTransactions)
     .where(inArray(creditTransactions.toUserId, [userId]))
     .orderBy(desc(creditTransactions.createdAt));
+}
+
+// ========== MESSAGING QUERIES ==========
+
+export async function getOrCreateConversation(
+  user1Id: number,
+  user2Id: number,
+  sessionId?: number
+): Promise<Conversation> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Normalize user IDs to ensure consistent conversation lookup
+  const [minId, maxId] = user1Id < user2Id ? [user1Id, user2Id] : [user2Id, user1Id];
+
+  // Try to find existing conversation
+  const existing = await db
+    .select()
+    .from(conversations)
+    .where(
+      and(
+        or(
+          and(eq(conversations.user1Id, minId), eq(conversations.user2Id, maxId)),
+          and(eq(conversations.user1Id, maxId), eq(conversations.user2Id, minId))
+        )
+      )
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    return existing[0];
+  }
+
+  // Create new conversation
+  const result = await db.insert(conversations).values({
+    user1Id: minId,
+    user2Id: maxId,
+    sessionId,
+  });
+
+  return {
+    id: result[0].insertId as number,
+    user1Id: minId,
+    user2Id: maxId,
+    sessionId: sessionId || null,
+    lastMessageAt: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
+export async function getUserConversations(userId: number): Promise<
+  (Conversation & { otherUserId: number; lastMessage?: string })[]
+> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const convs = await db
+    .select()
+    .from(conversations)
+    .where(
+      or(
+        eq(conversations.user1Id, userId),
+        eq(conversations.user2Id, userId)
+      )
+    )
+    .orderBy(desc(conversations.lastMessageAt));
+
+  // Get last message for each conversation
+  const result = await Promise.all(
+    convs.map(async (conv) => {
+      const lastMsg = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, conv.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+
+      const otherUserId = conv.user1Id === userId ? conv.user2Id : conv.user1Id;
+
+      return {
+        ...conv,
+        otherUserId,
+        lastMessage: lastMsg[0]?.content,
+      };
+    })
+  );
+
+  return result;
+}
+
+export async function getConversationMessages(
+  conversationId: number,
+  limit: number = 50,
+  offset: number = 0
+): Promise<Message[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(desc(messages.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return result.reverse(); // Return in ascending order (oldest first)
+}
+
+export async function createMessage(
+  conversationId: number,
+  senderId: number,
+  content: string
+): Promise<Message> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const result = await db.insert(messages).values({
+    conversationId,
+    senderId,
+    content,
+  });
+
+  // Update conversation's lastMessageAt
+  await db
+    .update(conversations)
+    .set({ lastMessageAt: new Date() })
+    .where(eq(conversations.id, conversationId));
+
+  return {
+    id: result[0].insertId as number,
+    conversationId,
+    senderId,
+    content,
+    isRead: false,
+    readAt: null,
+    createdAt: new Date(),
+  };
+}
+
+export async function markMessagesAsRead(
+  conversationId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(messages)
+    .set({ isRead: true, readAt: new Date() })
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.isRead, false)
+      )
+    );
+}
+
+export async function getUnreadMessageCount(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Get all conversations for this user
+  const userConvs = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(
+      or(
+        eq(conversations.user1Id, userId),
+        eq(conversations.user2Id, userId)
+      )
+    );
+
+  if (userConvs.length === 0) return 0;
+
+  const convIds = userConvs.map((c) => c.id);
+
+  // Count unread messages from other users
+  const result = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        inArray(messages.conversationId, convIds),
+        eq(messages.isRead, false)
+      )
+    );
+
+  return result.length;
 }
