@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import { Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,18 +17,84 @@ export default function ChatBox({ conversationId, otherUserName }: ChatBoxProps)
   const { user } = useAuth();
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // WebSocket - pass conversationId as parameter
+  const {
+    joinConversation,
+    leaveConversation,
+    sendMessage: sendWebSocketMessage,
+    onNewMessage,
+    onUserTyping,
+    onUserStopTyping,
+    sendTyping,
+    sendStopTyping,
+  } = useWebSocket() || {};
 
   // Queries
   const messagesQuery = trpc.messages.getMessages.useQuery(
     { conversationId },
-    { refetchInterval: 3000 } // Poll for new messages every 3 seconds
+    { refetchInterval: 0 } // Disable polling, use WebSocket instead
   );
 
   // Mutations
   const sendMutation = trpc.messages.send.useMutation();
 
-  const messages = messagesQuery.data || [];
+  // Join conversation on mount
+  useEffect(() => {
+    if (joinConversation && leaveConversation) {
+      joinConversation(conversationId);
+      return () => {
+        leaveConversation(conversationId);
+      };
+    }
+  }, [conversationId, joinConversation, leaveConversation]);
+
+  // Load initial messages
+  useEffect(() => {
+    if (messagesQuery.data) {
+      setMessages(messagesQuery.data);
+    }
+  }, [messagesQuery.data]);
+
+  // Listen for new messages via WebSocket
+  useEffect(() => {
+    if (!onNewMessage) return;
+    onNewMessage((data: any) => {
+      if (data.conversationId === conversationId) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now(),
+            conversationId: data.conversationId,
+            senderId: data.senderId,
+            content: data.content,
+            isRead: false,
+            createdAt: data.timestamp,
+          },
+        ]);
+      }
+    });
+  }, [conversationId, onNewMessage]);
+
+  // Listen for typing indicators
+  useEffect(() => {
+    if (!onUserTyping || !onUserStopTyping) return;
+    onUserTyping((data: any) => {
+      if (data.conversationId === conversationId && data.userId !== user?.id) {
+        setIsTyping(true);
+      }
+    });
+
+    onUserStopTyping((data: any) => {
+      if (data.conversationId === conversationId && data.userId !== user?.id) {
+        setIsTyping(false);
+      }
+    });
+  }, [conversationId, user?.id, onUserTyping, onUserStopTyping, onUserStopTyping]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -40,21 +107,42 @@ export default function ChatBox({ conversationId, otherUserName }: ChatBoxProps)
     if (!message.trim()) return;
 
     setLoading(true);
+    const messageContent = message.trim();
+    setMessage("");
+    if (sendStopTyping) sendStopTyping(conversationId);
 
     try {
+      // Send via tRPC to persist to database
       await sendMutation.mutateAsync({
         conversationId,
-        content: message.trim(),
+        content: messageContent,
       });
 
-      setMessage("");
-      // Refetch messages
-      await messagesQuery.refetch();
+      // Also broadcast via WebSocket for real-time delivery
+      if (sendWebSocketMessage) sendWebSocketMessage(conversationId, messageContent);
     } catch (error) {
       toast.error("Failed to send message");
+      setMessage(messageContent); // Restore message on error
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMessage(e.target.value);
+
+    // Send typing indicator
+    if (sendTyping) sendTyping(conversationId);
+
+    // Clear previous timeout
+    if (typingTimeoutRef.current !== null) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set new timeout to stop typing indicator
+    typingTimeoutRef.current = setTimeout(() => {
+      if (sendStopTyping) sendStopTyping(conversationId);
+    }, 3000);
   };
 
   return (
@@ -94,6 +182,23 @@ export default function ChatBox({ conversationId, otherUserName }: ChatBoxProps)
             </div>
           ))
         )}
+        {isTyping && (
+          <div className="flex justify-start">
+            <div className="bg-muted text-muted-foreground px-4 py-2 rounded-lg rounded-bl-none">
+              <div className="flex gap-1 items-center">
+                <div className="w-2 h-2 bg-current rounded-full animate-bounce" />
+                <div
+                  className="w-2 h-2 bg-current rounded-full animate-bounce"
+                  style={{ animationDelay: "0.1s" }}
+                />
+                <div
+                  className="w-2 h-2 bg-current rounded-full animate-bounce"
+                  style={{ animationDelay: "0.2s" }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -103,7 +208,7 @@ export default function ChatBox({ conversationId, otherUserName }: ChatBoxProps)
           <Input
             placeholder="Type a message..."
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={handleTyping}
             disabled={loading}
             maxLength={1000}
           />

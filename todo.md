@@ -71,6 +71,6 @@
 - [x] Create backend tRPC procedures for messaging
 - [x] Build messaging UI components
 - [x] Create messages page and integrate with dashboard
-- [ ] Add real-time WebSocket support for live messaging
+- [x] Add real-time WebSocket support for live messaging
 - [x] Write tests for messaging procedures (8 tests added)
 - [x] Polish and finalize messaging system
